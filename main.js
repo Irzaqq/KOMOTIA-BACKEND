@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import productRouter from './router/products.js';
 import usersRouter from './router/users.js'; 
 import transactionRouter from './router/transaction.js'; 
@@ -13,6 +14,7 @@ import categoriesRouter from './router/categories.js';
 const app = express();
 const port = process.env.APP_PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 app.use('/products', productRouter);
 app.use('/users', usersRouter);
