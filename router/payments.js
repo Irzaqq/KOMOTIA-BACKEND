@@ -1,8 +1,11 @@
+import fs from "fs";
+import path from "path";
 import { Router } from "express";
+
 import db from "../config/db.js";
+import uploadPayment from "../middleware/uploadPayment.js";
 
 const router = Router();
-
 // 1. GET ALL
 router.get("/", (req, res) => {
   db.query("SELECT * FROM payments", (err, results) => {
@@ -31,31 +34,117 @@ router.get("/transaction/:id_transaction", (req, res) => {
 });
 
 // 4. POST
-router.post("/", (req, res) => {
-  const { id_transaction, tanggal_bayar, jumlah_bayar, bukti_transfer, status_verifikasi } = req.body;
+router.post(
+  "/",
+  uploadPayment.single("bukti"),
+  (req, res) => {
+    const {
+      id_transaction,
+      jumlah_bayar,
+      status_verifikasi,
+    } = req.body;
 
-  const sql = `INSERT INTO payments 
-    (id_transaction, tanggal_bayar, jumlah_bayar, bukti_transfer, status_verifikasi) 
-    VALUES (?, ?, ?, ?, ?)`;
+    console.log("BODY PAYMENT:", req.body);
+    console.log("FILE PAYMENT:", req.file);
 
-  db.query(
-    sql,
-    [
-      id_transaction ?? null,
-      tanggal_bayar ?? null,
-      jumlah_bayar ?? null,
-      bukti_transfer ?? null,
-      status_verifikasi ?? "menunggu",
-    ],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json({
-        message: "Payment berhasil ditambahkan!",
-        id_payment: result.insertId,
+    const parsedIdTransaction =
+      Number(id_transaction);
+
+    const parsedJumlahBayar =
+      Number(jumlah_bayar);
+
+    if (
+      !Number.isInteger(parsedIdTransaction) ||
+      parsedIdTransaction <= 0
+    ) {
+      if (req.file) {
+        fs.unlink(req.file.path, () => {});
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "ID transaksi tidak valid.",
       });
     }
-  );
-});
+
+    if (
+      !Number.isFinite(parsedJumlahBayar) ||
+      parsedJumlahBayar <= 0
+    ) {
+      if (req.file) {
+        fs.unlink(req.file.path, () => {});
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Jumlah pembayaran tidak valid.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+            "Bukti pembayaran wajib diunggah.",
+      });
+    }
+
+    const buktiTransfer =
+        `/uploads/payments/${req.file.filename}`;
+
+    const sql = `
+      INSERT INTO payments (
+        id_transaction,
+        tanggal_bayar,
+        jumlah_bayar,
+        bukti_transfer,
+        status_verifikasi
+      )
+      VALUES (?, NOW(), ?, ?, ?)
+    `;
+
+    db.query(
+      sql,
+      [
+        parsedIdTransaction,
+        parsedJumlahBayar,
+        buktiTransfer,
+        status_verifikasi || "menunggu",
+      ],
+      (error, result) => {
+        if (error) {
+          console.error(
+            "ERROR INSERT PAYMENT:",
+            error,
+          );
+
+          if (req.file) {
+            fs.unlink(req.file.path, () => {});
+          }
+
+          return res.status(500).json({
+            success: false,
+            message:
+                "Gagal menyimpan pembayaran.",
+            error: error.message,
+          });
+        }
+
+        return res.status(201).json({
+          success: true,
+          message:
+              "Bukti pembayaran berhasil dikirim.",
+          id_payment: result.insertId,
+          tanggal_bayar:
+              new Date().toISOString(),
+          bukti_transfer: buktiTransfer,
+          status_verifikasi:
+              status_verifikasi || "menunggu",
+        });
+      },
+    );
+  },
+);
 
 // 5. PUT
 router.put("/:id", (req, res) => {

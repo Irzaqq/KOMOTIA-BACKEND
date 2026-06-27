@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "main.js",
+    "router",
+    "config",
+    "middleware"
+  ],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "uploads/**",
+    "node_modules/**"
+  ]
+}
